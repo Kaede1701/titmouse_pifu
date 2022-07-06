@@ -242,71 +242,88 @@ class TrainDataset(Dataset):
             # Transform under image pixel space
             trans_intrinsic = np.identity(4)
 
-            mask = Image.open(mask_path).convert('L')
-            render = Image.open(render_path).convert('RGB')
-
-            if self.is_train:
-                # Pad images
-                pad_size = int(0.1 * self.load_size)
-                render = ImageOps.expand(render, pad_size, fill=0)
-                mask = ImageOps.expand(mask, pad_size, fill=0)
-
-                w, h = render.size
-                th, tw = self.load_size, self.load_size
-
-                # random flip
-                if self.opt.random_flip and np.random.rand() > 0.5:
-                    scale_intrinsic[0, 0] *= -1
-                    render = transforms.RandomHorizontalFlip(p=1.0)(render)
-                    mask = transforms.RandomHorizontalFlip(p=1.0)(mask)
-
-                # random scale
-                if self.opt.random_scale:
-                    rand_scale = random.uniform(0.9, 1.1)
-                    w = int(rand_scale * w)
-                    h = int(rand_scale * h)
-                    render = render.resize((w, h), Image.BILINEAR)
-                    mask = mask.resize((w, h), Image.NEAREST)
-                    scale_intrinsic *= rand_scale
-                    scale_intrinsic[3, 3] = 1
-
-                # random translate in the pixel space
-                if self.opt.random_trans:
-                    dx = random.randint(-int(round((w - tw) / 10.)),
-                                        int(round((w - tw) / 10.)))
-                    dy = random.randint(-int(round((h - th) / 10.)),
-                                        int(round((h - th) / 10.)))
-                else:
-                    dx = 0
-                    dy = 0
-
-                trans_intrinsic[0, 3] = -dx / float(self.opt.loadSize // 2)
-                trans_intrinsic[1, 3] = -dy / float(self.opt.loadSize // 2)
-
-                x1 = int(round((w - tw) / 2.)) + dx
-                y1 = int(round((h - th) / 2.)) + dy
-
-                render = render.crop((x1, y1, x1 + tw, y1 + th))
-                mask = mask.crop((x1, y1, x1 + tw, y1 + th))
-
-                render = self.aug_trans(render)
-
-                # random blur
-                if self.opt.aug_blur > 0.00001:
-                    blur = GaussianBlur(np.random.uniform(0, self.opt.aug_blur))
-                    render = render.filter(blur)
+            # mask = Image.open(mask_path).convert('L')
+            # render = Image.open(render_path).convert('RGB')
+            #
+            # if self.is_train:
+            #     # Pad images
+            #     pad_size = int(0.1 * self.load_size)
+            #     render = ImageOps.expand(render, pad_size, fill=0)
+            #     mask = ImageOps.expand(mask, pad_size, fill=0)
+            #
+            #     w, h = render.size
+            #     th, tw = self.load_size, self.load_size
+            #
+            #     # random flip
+            #     if self.opt.random_flip and np.random.rand() > 0.5:
+            #         scale_intrinsic[0, 0] *= -1
+            #         render = transforms.RandomHorizontalFlip(p=1.0)(render)
+            #         mask = transforms.RandomHorizontalFlip(p=1.0)(mask)
+            #
+            #     # random scale
+            #     if self.opt.random_scale:
+            #         rand_scale = random.uniform(0.9, 1.1)
+            #         w = int(rand_scale * w)
+            #         h = int(rand_scale * h)
+            #         render = render.resize((w, h), Image.BILINEAR)
+            #         mask = mask.resize((w, h), Image.NEAREST)
+            #         scale_intrinsic *= rand_scale
+            #         scale_intrinsic[3, 3] = 1
+            #
+            #     # random translate in the pixel space
+            #     if self.opt.random_trans:
+            #         dx = random.randint(-int(round((w - tw) / 10.)),
+            #                             int(round((w - tw) / 10.)))
+            #         dy = random.randint(-int(round((h - th) / 10.)),
+            #                             int(round((h - th) / 10.)))
+            #     else:
+            #         dx = 0
+            #         dy = 0
+            #
+            #     trans_intrinsic[0, 3] = -dx / float(self.opt.loadSize // 2)
+            #     trans_intrinsic[1, 3] = -dy / float(self.opt.loadSize // 2)
+            #
+            #     x1 = int(round((w - tw) / 2.)) + dx
+            #     y1 = int(round((h - th) / 2.)) + dy
+            #
+            #     render = render.crop((x1, y1, x1 + tw, y1 + th))
+            #     mask = mask.crop((x1, y1, x1 + tw, y1 + th))
+            #
+            #     render = self.aug_trans(render)
+            #
+            #     # random blur
+            #     if self.opt.aug_blur > 0.00001:
+            #         blur = GaussianBlur(np.random.uniform(0, self.opt.aug_blur))
+            #         render = render.filter(blur)
 
             intrinsic = np.matmul(trans_intrinsic, np.matmul(uv_intrinsic, scale_intrinsic))
             calib = torch.Tensor(np.matmul(intrinsic, extrinsic)).float()
             extrinsic = torch.Tensor(extrinsic).float()
 
-            mask = transforms.Resize(self.load_size)(mask)
+            # mask = transforms.Resize(self.load_size)(mask)
+            # mask = transforms.ToTensor()(mask).float()
+            # mask_list.append(mask)
+            #
+            # render = self.to_tensor(render)
+            # render = mask.expand_as(render) * render
+
+            render = cv2.imread(render_path).astype(np.uint8)
+            mask = cv2.imread(mask_path).astype(np.uint8)
+
+            render = np.float32(cv2.cvtColor(render, cv2.COLOR_RGB2BGR)) / 255
+            mask = np.float32(mask) / 255.
+
+            if len(mask.shape) == 2:
+                mask = np.expand_dims(mask, axis=-1)
+            alpha = np.random.uniform(0.85, 1.15)
+            beta = np.random.uniform(-0.15, 0.15)
+            render = np.clip(alpha * render + beta, 0, 1)
+            render = render * mask + (1 - mask)
+            render = transforms.ToTensor()(render).float()
             mask = transforms.ToTensor()(mask).float()
+            # -----------------------------------------------------------------------------------
+
             mask_list.append(mask)
-
-            render = self.to_tensor(render)
-            render = mask.expand_as(render) * render
-
             render_list.append(render)
             calib_list.append(calib)
             extrinsic_list.append(extrinsic)
@@ -371,6 +388,19 @@ class TrainDataset(Dataset):
             'labels': labels
         }
 
+    # def load_npz(self, subject):
+    #     npz_fpath = os.path.join(self.dataset_dir, data_item, 'npz/*.npz')
+    #     try:
+    #         npz_data = np.load(npz_fpath)
+    #     except:
+    #         print('Value error occurred when loading ' + npz_fpath)
+    #
+    #     posmap = npz_data['posmap{}'.format(32)]
+    #     scan_name = str(npz_data['scan_name'])
+    #     body_verts = npz_data['body_verts']
+    #     scan_n = npz_data['scan_n']
+    #     scan_pc = npz_data['scan_pc']  # scan_pc: the GT point cloud.
+    #     return posmap, scan_name, body_verts, scan_n, scan_pc
 
     def get_color_sampling(self, subject, yid, pid=0):
         yaw = self.yaw_list[yid]

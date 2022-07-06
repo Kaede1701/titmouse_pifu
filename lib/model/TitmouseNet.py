@@ -72,6 +72,8 @@ class TitmouseNet(BasePIFuNet):
         self.tmpx = None
         self.normx = None
 
+        self.feat_grid_list = []
+
         self.intermediate_preds_list = []
 
         init_net(self)
@@ -87,7 +89,18 @@ class TitmouseNet(BasePIFuNet):
         if not self.training:
             self.im_feat_list = [self.im_feat_list[-1]]
 
-    def query(self, pcd, points, calibs, transforms=None, labels=None):
+    def pcd_filter(self, pcd):
+        occupancies = pcd.new_zeros(pcd.size(0), len(self.grid_points))
+        kp_pred = pcd.transpose(1, 2).detach().cpu().numpy()
+
+        for b in range(pcd.size(0)):
+            _, idx = self.kdtree.query(kp_pred[b])
+            occupancies[b, idx] = 1
+
+        voxel_kp_pred = occupancies.view(pcd.size(0), self.reso_grid, self.reso_grid, self.reso_grid)
+        self.feat_grid_list = self.point_voxel(voxel_kp_pred.detach())
+
+    def query(self, points, calibs, transforms=None, labels=None):
         '''
         Given 3D points, query the network predictions for each point.
         Image features should be pre-computed before this call.
@@ -106,22 +119,8 @@ class TitmouseNet(BasePIFuNet):
         xy = xyz[:, :2, :]
         z = xyz[:, 2:3, :]
 
-        # new coding start
-        occupancies = pcd.new_zeros(pcd.size(0), len(self.grid_points))
-        kp_pred = pcd.transpose(1, 2).detach().cpu().numpy()
-
-        for b in range(pcd.size(0)):
-            _, idx = self.kdtree.query(kp_pred[b])
-            occupancies[b, idx] = 1
-
-        voxel_kp_pred = occupancies.view(pcd.size(0), self.reso_grid, self.reso_grid, self.reso_grid)
-        self.feat_grid = self.point_voxel(voxel_kp_pred.detach())
-
         vgrid = xyz.transpose(1, 2)
         vgrid = vgrid[:, :, None, None, :]
-
-        xyz_fea_grid = F.grid_sample(self.feat_grid, vgrid, padding_mode='border', align_corners=True,
-                                     mode='bilinear').squeeze(-1).squeeze(-1)  # out : (B,C,num_sample_inout)
 
         # new coding end
 
@@ -134,9 +133,17 @@ class TitmouseNet(BasePIFuNet):
 
         self.intermediate_preds_list = []
 
+        xyz_feat_grid_list = []
+        for pcd_feat in self.feat_grid_list:
+            xyz_feat_grid = F.grid_sample(pcd_feat, vgrid, padding_mode='border', align_corners=True,
+                                          mode='bilinear').squeeze(-1).squeeze(-1)  # out : (B,C,num_sample_inout)
+            xyz_feat_grid_list.append(xyz_feat_grid)
+
+        multi_xyz_feat_grid = torch.cat(xyz_feat_grid_list, 1)
+
         for im_feat in self.im_feat_list:
             # [B, Feat_i + z, N]
-            point_local_feat_list = [self.index(im_feat, xy), xyz_fea_grid, xyz]
+            point_local_feat_list = [self.index(im_feat, xy), multi_xyz_feat_grid, xyz, z_feat]
 
             if self.opt.skip_hourglass:
                 point_local_feat_list.append(tmpx_local_feature)
@@ -172,8 +179,10 @@ class TitmouseNet(BasePIFuNet):
         # Get image feature
         self.filter(images)
 
+        self.pcd_filter(pcd)
+
         # Phase 2: point query
-        self.query(pcd=pcd, points=points, calibs=calibs, transforms=transforms, labels=labels)
+        self.query(points=points, calibs=calibs, transforms=transforms, labels=labels)
 
         # get the prediction
         res = self.get_preds()

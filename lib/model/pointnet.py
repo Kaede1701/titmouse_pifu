@@ -6,6 +6,9 @@ import torch.utils.data
 from torch.autograd import Variable
 import numpy as np
 import torch.nn.functional as F
+from plyfile import PlyData
+import pandas as pd
+import os
 
 
 class STN3d(nn.Module):
@@ -16,7 +19,7 @@ class STN3d(nn.Module):
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 30)
+        self.fc3 = nn.Linear(256, 9)
         self.relu = nn.ReLU()
 
         self.bn1 = nn.BatchNorm1d(64)
@@ -43,7 +46,7 @@ class STN3d(nn.Module):
         # if x.is_cuda:
         #     iden = iden.cuda()
         # x = x + iden
-        x = x.view(-1, 10, 3)
+        x = x.view(-1, 3, 3)
         return x
 
 
@@ -91,10 +94,10 @@ class PointNetfeat(nn.Module):
         self.stn = STN3d()
         self.conv1 = torch.nn.Conv1d(3, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, 1020, 1)
+        self.conv3 = torch.nn.Conv1d(128, 32, 1)
         self.bn1 = nn.BatchNorm1d(64)
         self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1020)
+        self.bn3 = nn.BatchNorm1d(32)
         self.global_feat = global_feat
         self.feature_transform = feature_transform
         if self.feature_transform:
@@ -121,12 +124,12 @@ class PointNetfeat(nn.Module):
         x = self.bn3(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         print('not view: ', x.size())
-        x = x.view(-1, 1020)
+        x = x.view(-1, 32)
         # print('x in pointnet size: ', x.size(), trans.size(), trans_feat.size())
         if self.global_feat:
             return x, trans, trans_feat
         else:
-            x = x.view(-1, 1020, 1).repeat(1, 1, n_pts)
+            x = x.view(-1, 32, 1).repeat(1, 1, n_pts)
             out = torch.cat([x, pointfeat], 1), trans, trans_feat.p
             print('output in pointnet: ', out.size())
             return torch.cat([x, pointfeat], 1), trans, trans_feat
@@ -142,23 +145,40 @@ def feature_transform_regularizer(trans):
     loss = torch.mean(torch.norm(torch.bmm(trans, trans.transpose(2, 1)) - I, dim=(1, 2)))
     return loss
 
+
+def get_pcd():
+    pcd_path = os.path.join('/media/mana/mana/dataset/Titmouse_pifu/PCD/0001/titmouse_0001_watertight_pred.ply')
+    plydata = PlyData.read(pcd_path)
+    data = plydata.elements[0].data
+    data_pd = pd.DataFrame(data)
+    data_np = np.zeros(data_pd.shape, dtype=float)
+    property_names = data[0].dtype.names
+    for i, name in enumerate(property_names):
+        data_np[:, i] = data_pd[name]
+    pcd_data = data_np[:, :3]
+    return torch.tensor(pcd_data).float()
+
+
 if __name__ == '__main__':
-    sim_data = Variable(torch.rand(1, 3, 2500))
-    trans = STN3d()
-    out = trans(sim_data)
-    print('stn', out.size())
-    print('loss', feature_transform_regularizer(out))
+    # sim_data = Variable(torch.rand(1, 3, 2500))
+    # trans = STN3d()
+    # out = trans(sim_data)
+    # print('stn', out.size())
+    # print('loss', feature_transform_regularizer(out))
+    #
+    # sim_data_64d = Variable(torch.rand(1, 64, 2500))
+    # trans = STNkd(k=64)
+    # out = trans(sim_data_64d)
+    # print('stn64d', out.size())
+    # print('loss', feature_transform_regularizer(out))
 
-    sim_data_64d = Variable(torch.rand(1, 64, 2500))
-    trans = STNkd(k=64)
-    out = trans(sim_data_64d)
-    print('stn64d', out.size())
-    print('loss', feature_transform_regularizer(out))
+    pcd = get_pcd().unsqueeze(0).permute(0, 2, 1)
 
-    pointfeat = PointNetfeat(global_feat=True)
-    out, _, _ = pointfeat(sim_data)
+    pointfeat = PointNetfeat(global_feat=True, feature_transform=False)
+    pointfeat.eval()
+    out, _, _ = pointfeat(pcd)
     print('global feat', out.size())
 
-    pointfeat = PointNetfeat(global_feat=False)
-    out, _, _ = pointfeat(sim_data)
-    print('point feat', out.size())
+    # pointfeat = PointNetfeat(global_feat=False)
+    # out, _, _ = pointfeat(pcd)
+    # print('point feat', out.size())

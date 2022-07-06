@@ -42,4 +42,4 @@ class PointNet(nn.Module):
         fea = self.conv1_1_bn(net)
         feat_list.append(fea)
 
-        return fea
+        return feat_list

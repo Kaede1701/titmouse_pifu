@@ -4,3 +4,4 @@ from .ConvPIFuNet import ConvPIFuNet
 from .HGPIFuNet import HGPIFuNet
 from .ResBlkPIFuNet import ResBlkPIFuNet
 from .TitmouseNet import TitmouseNet
+from .TitmouseVolumeNet import TitmouseVolumeNet

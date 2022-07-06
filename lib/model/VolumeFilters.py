@@ -2,6 +2,7 @@
 
 import torch.nn as nn
 import math
+from lib.extensions.gridding_util import Gridding
 
 
 class BaseNetwork(nn.Module):
@@ -80,6 +81,7 @@ class VolumeEncoder(BaseNetwork):
     """CycleGan Encoder"""
     def __init__(self, num_in=3, num_out=32):
         super(VolumeEncoder, self).__init__()
+        self.gridding = Gridding(scale=128)
         self.num_in = num_in
         self.num_out = num_out
         self.num_inter = 8
@@ -123,4 +125,3 @@ class VolumeEncoder(BaseNetwork):
             out = self.r2(out)
             out = self.r3(out)
             return out
-

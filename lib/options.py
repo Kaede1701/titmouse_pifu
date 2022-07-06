@@ -16,7 +16,7 @@ class BaseOptions():
 
         # Experiment related
         g_exp = parser.add_argument_group('Experiment')
-        g_exp.add_argument('--name', type=str, default='example',
+        g_exp.add_argument('--name', type=str, default='TitmouseVolumeNet',
                            help='name of the experiment. It decides where to store samples and models')
         g_exp.add_argument('--debug', action='store_true', help='debug mode or not')
 
@@ -37,7 +37,7 @@ class BaseOptions():
         g_train.add_argument('--learning_rate', type=float, default=1e-3, help='adam learning rate')
         g_train.add_argument('--learning_rateC', type=float, default=1e-3, help='adam learning rate')
         g_train.add_argument('--num_epoch', type=int, default=100, help='num epoch to train')
-        g_train.add_argument('--feat_type', type=str, default='point_voxel', help='num epoch to train')
+        g_train.add_argument('--feat_type', type=str, default='volume', help='num epoch to train')
         g_train.add_argument('--pn_hid_dim', type=int, default=32, help='# hidden dim of point net')
         g_train.add_argument('--use2D', type=bool, default=False, help='# ')
         g_train.add_argument('--reso_grid', type=int, default=32, help='# resolution of grid')
@@ -85,7 +85,7 @@ class BaseOptions():
         g_model.add_argument('--hourglass_dim', type=int, default='256', help='256 | 512')
 
         # Classification General
-        g_model.add_argument('--mlp_dim', nargs='+', default=[291, 1024, 512, 256, 128, 1], type=int,
+        g_model.add_argument('--mlp_dim', nargs='+', default=[289, 1024, 512, 256, 128, 1], type=int,
                              help='# of dimensions of mlp')
         g_model.add_argument('--mlp_dim_color', nargs='+', default=[513, 1024, 512, 256, 128, 3],
                              type=int, help='# of dimensions of color mlp')
@@ -116,7 +116,7 @@ class BaseOptions():
         parser.add_argument('--checkpoints_path', type=str, default='./checkpoints', help='path to save checkpoints')
         parser.add_argument('--load_netG_checkpoint_path', type=str, default=None, help='path to save checkpoints')
         parser.add_argument('--load_netC_checkpoint_path', type=str, default=None, help='path to save checkpoints')
-        parser.add_argument('--load_netM_checkpoint_path', type=str, default='/media/mana/mana/code/unzip/titmouse_pifu/apps/checkpoints/example/netM_latest', help='path to save checkpoints')
+        parser.add_argument('--load_netM_checkpoint_path', type=str, default=None, help='path to save checkpoints')
         parser.add_argument('--results_path', type=str, default='./results', help='path to save results ply')
         parser.add_argument('--load_checkpoint_path', type=str, help='path to save results ply')
         parser.add_argument('--single', type=str, default='', help='single data for training')
